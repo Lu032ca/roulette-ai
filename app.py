@@ -20,30 +20,50 @@ div.stButton > button {
 </style>
 """, unsafe_allow_html=True)
 
-# ACCESSO
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.title("🎯 ROULETTE AI")
-    with st.form("login"):
-        password = st.text_input("Password", type="password")
-        if st.form_submit_button("ENTRA"):
-            if password == st.secrets["APP_PASSWORD"]:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Password non corretta.")
-    st.stop()
-
-# DATABASE
+# DATABASE E ACCESSO PERSONALE
 try:
     db = create_client(
         st.secrets["SUPABASE_URL"],
-        st.secrets["SUPABASE_KEY"]
+        st.secrets["SUPABASE_PUBLISHABLE_KEY"]
     )
 except Exception as e:
     st.error(f"Errore di collegamento: {type(e).__name__}: {e}")
+    st.stop()
+
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+    st.session_state.refresh_token = None
+
+if st.session_state.access_token and st.session_state.refresh_token:
+    try:
+        db.auth.set_session(
+            st.session_state.access_token,
+            st.session_state.refresh_token
+        )
+        session = db.auth.get_session()
+        if session:
+            st.session_state.access_token = session.access_token
+            st.session_state.refresh_token = session.refresh_token
+    except Exception:
+        st.session_state.access_token = None
+        st.session_state.refresh_token = None
+
+if not st.session_state.access_token:
+    st.title("🎯 ROULETTE AI")
+    with st.form("login"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("ENTRA"):
+            try:
+                result = db.auth.sign_in_with_password({
+                    "email": email.strip(),
+                    "password": password
+                })
+                st.session_state.access_token = result.session.access_token
+                st.session_state.refresh_token = result.session.refresh_token
+                st.rerun()
+            except Exception:
+                st.error("Email o password non corretti.")
     st.stop()
 
 ROSSI = {
