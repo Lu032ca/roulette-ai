@@ -362,13 +362,13 @@ with st.expander("👥 Condivisione e accessi"):
         st.markdown("#### Crea un invito")
         with st.form("create_invite"):
             ruolo_invito = st.selectbox(
-                "Permessi dell'invitato",
-                ["viewer", "editor"],
-                format_func=lambda x: (
-                    "Solo visualizzazione" if x == "viewer"
-                    else "Può inserire numeri"
-                )
-            )
+    "Permessi dell'invitato",
+    ["viewer", "editor"],
+    format_func=lambda x: (
+        "👁️ Viewer" if x == "viewer"
+        else "✏️ Editor"
+    )
+)
             genera = st.form_submit_button("GENERA CODICE")
 
         if genera:
