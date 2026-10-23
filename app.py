@@ -327,10 +327,10 @@ puo_inserire = ruolo in ("owner", "editor")
 proprietario = ruolo == "owner"
 
 st.caption({
-    "owner": "👑 Proprietario del tavolo",
-    "editor": "✏️ Puoi inserire numeri",
-    "viewer": "👁️ Solo visualizzazione"
-}.get(ruolo, "Tavolo condiviso"))
+    "owner": "👑",
+    "editor": "🎲",
+    "viewer": "👁️"
+}.get(ruolo, "tavolo condiviso"))
 
 
 # CONDIVISIONE TAVOLO
