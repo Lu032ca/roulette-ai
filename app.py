@@ -96,7 +96,9 @@ if current_user is None:
 
     with tab_register:
         with st.form("register"):
-            new_email = st.text_input("La tua email", key="register_email")
+            new_email = st.text_input(
+                "La tua email", key="register_email"
+            )
             new_password = st.text_input(
                 "Crea una password",
                 type="password",
@@ -269,6 +271,7 @@ except Exception as e:
 
 ruoli = {int(m["session_id"]): m["role"] for m in memberships}
 
+
 def ruolo_sessione(s):
     if str(s["user_id"]) == user_id:
         return "owner"
@@ -360,15 +363,16 @@ with st.expander("👥 Condivisione e accessi"):
 
     if proprietario:
         st.markdown("#### Crea un invito")
+
         with st.form("create_invite"):
             ruolo_invito = st.selectbox(
-    "Permessi dell'invitato",
-    ["viewer", "editor"],
-    format_func=lambda x: (
-        "👁️ Viewer" if x == "viewer"
-        else "✏️ Editor"
-    )
-)
+                "Permessi dell'invitato",
+                ["viewer", "editor"],
+                format_func=lambda x: (
+                    "👁️ Viewer" if x == "viewer"
+                    else "✏️ Editor"
+                )
+            )
             genera = st.form_submit_button("GENERA CODICE")
 
         if genera:
@@ -404,6 +408,7 @@ with st.expander("👥 Condivisione e accessi"):
                 st.code(st.session_state["ultimo_invito"])
 
         st.markdown("#### Membri del tavolo")
+
         try:
             membri = (
                 db.table("session_members")
@@ -435,6 +440,7 @@ with st.expander("👥 Condivisione e accessi"):
             st.error(f"Errore caricamento membri: {e}")
 
         st.markdown("#### Revoca codici d'invito")
+
         try:
             inviti = (
                 db.table("session_invites")
@@ -447,9 +453,8 @@ with st.expander("👥 Condivisione e accessi"):
 
             for invito in inviti:
                 c1, c2 = st.columns([3, 1])
-                c1.write(
-                    f"{invito['code']} — {invito['role']}"
-                )
+                c1.write(f"{invito['code']} — {invito['role']}")
+
                 with c2:
                     if st.button(
                         "Disattiva",
@@ -490,6 +495,7 @@ st.caption("Tocca un numero per registrarlo.")
 if puo_inserire:
     for start in range(0, 37, 3):
         cols = st.columns(3)
+
         for j, n in enumerate(range(start, min(start + 3, 37))):
             with cols[j]:
                 if st.button(
@@ -504,6 +510,7 @@ else:
 
 # ANNULLA ULTIMO NUMERO
 st.divider()
+
 if rows:
     ultimo = rows[0]
     st.write(
@@ -591,6 +598,7 @@ if totale:
     min_freq = min(frequenze.get(n, 0) for n in range(37))
 
     c1, c2 = st.columns(2)
+
     c1.markdown("**Più usciti**")
     c1.write(", ".join(
         str(n) for n in range(37)
@@ -615,23 +623,30 @@ dozzine = [
     sum(13 <= n <= 24 for n in numbers),
     sum(25 <= n <= 36 for n in numbers)
 ]
+
 colonne = [
     sum(n != 0 and (n - 1) % 3 == i for n in numbers)
     for i in range(3)
 ]
 
 l, r = st.columns(2)
+
 with l:
     st.markdown("**Dozzine**")
     for i, val in enumerate(dozzine, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
+
 with r:
     st.markdown("**Colonne**")
     for i, val in enumerate(colonne, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
 
 
-# ANALISI DELLE PUNTATE - SENZA PROBABILITA' TEORICHE
+# ANALISI DELLE PUNTATE
 st.divider()
 st.subheader("🧠 Analisi delle puntate")
 
@@ -645,22 +660,26 @@ if mercato == "Rosso / Nero":
         "Rosso": sum(colore(n) == "Rosso" for n in recenti),
         "Nero": sum(colore(n) == "Nero" for n in recenti)
     }
+
 elif mercato == "Pari / Dispari":
     gruppi = {
         "Pari": sum(n != 0 and n % 2 == 0 for n in recenti),
         "Dispari": sum(n % 2 == 1 for n in recenti)
     }
+
 elif mercato == "Basso / Alto":
     gruppi = {
         "Basso (1–18)": sum(1 <= n <= 18 for n in recenti),
         "Alto (19–36)": sum(19 <= n <= 36 for n in recenti)
     }
+
 elif mercato == "Dozzine":
     gruppi = {
         "1ª dozzina": sum(1 <= n <= 12 for n in recenti),
         "2ª dozzina": sum(13 <= n <= 24 for n in recenti),
         "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
     }
+
 else:
     gruppi = {
         f"{i + 1}ª colonna": sum(
@@ -671,22 +690,11 @@ else:
 
 if nr:
     st.write("**Risultati osservati nell'intervallo scelto:**")
+
     for label, value in gruppi.items():
         st.write(
             f"{label}: {value}/{nr} ({percentuale(value, nr):.2f}%)"
         )
-
-    massimo = max(gruppi.values())
-    minimo = min(gruppi.values())
-    st.info(
-        "Più frequente nei dati: "
-        + ", ".join(k for k, v in gruppi.items() if v == massimo)
-    )
-    st.write(
-        "Meno frequente nei dati: "
-        + ", ".join(k for k, v in gruppi.items() if v == minimo)
-    )
-
 else:
     st.info("Registra qualche giro per analizzare i risultati.")
 
@@ -697,25 +705,37 @@ st.subheader("🔥 Numeri caldi e freddi")
 
 if nr:
     freq_recenti = Counter(recenti)
+
     caldi = sorted(
-        range(37), key=lambda n: (-freq_recenti.get(n, 0), n)
+        range(37),
+        key=lambda n: (-freq_recenti.get(n, 0), n)
     )[:5]
+
     freddi = sorted(
-        range(37), key=lambda n: (freq_recenti.get(n, 0), n)
+        range(37),
+        key=lambda n: (freq_recenti.get(n, 0), n)
     )[:5]
 
     col_caldi, col_freddi = st.columns(2)
+
     with col_caldi:
         st.markdown("#### 🔥 Più usciti")
         for n in caldi:
-            st.write(f"{simbolo(n)} **{n}** — {freq_recenti.get(n, 0)} uscite")
+            st.write(
+                f"{simbolo(n)} **{n}** — "
+                f"{freq_recenti.get(n, 0)} uscite"
+            )
+
     with col_freddi:
         st.markdown("#### ❄️ Meno usciti")
         for n in freddi:
-            st.write(f"{simbolo(n)} **{n}** — {freq_recenti.get(n, 0)} uscite")
+            st.write(
+                f"{simbolo(n)} **{n}** — "
+                f"{freq_recenti.get(n, 0)} uscite"
+            )
 
 
-# CONSIGLIO PUNTATA E STORICO
+# CONSIGLIO PUNTATA
 st.divider()
 st.subheader("🎯 Consiglio della prossima puntata")
 
@@ -736,18 +756,21 @@ importo = st.number_input(
 
 if nr < 20:
     st.info("Registra almeno 20 giri nell'intervallo selezionato.")
+
 else:
     if mercato_consiglio == "Rosso/Nero":
         gruppi_cons = {
             "Rosso": sum(colore(n) == "Rosso" for n in recenti),
             "Nero": sum(colore(n) == "Nero" for n in recenti)
         }
+
     elif mercato_consiglio == "Dozzina":
         gruppi_cons = {
             "1ª dozzina": sum(1 <= n <= 12 for n in recenti),
             "2ª dozzina": sum(13 <= n <= 24 for n in recenti),
             "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
         }
+
     else:
         gruppi_cons = {
             f"{i + 1}ª colonna": sum(
@@ -757,6 +780,7 @@ else:
         }
 
     massimo = max(gruppi_cons.values())
+
     scelte = [
         nome for nome, conteggio in gruppi_cons.items()
         if conteggio == massimo
@@ -780,20 +804,33 @@ else:
                     "suggestion": scelta,
                     "stake": importo
                 }).execute()
-                st.success("Consiglio salvato. Verrà confrontato con il prossimo numero inserito.")
+
+                st.success(
+                    "Consiglio salvato. Verrà confrontato "
+                    "con il prossimo numero inserito."
+                )
                 st.rerun()
+
             except Exception as e:
                 st.error(f"Errore salvataggio consiglio: {e}")
-    else:
-        st.caption("Solo chi può inserire numeri può salvare un consiglio.")
 
+    else:
+        st.caption(
+            "Solo chi può inserire numeri può salvare un consiglio."
+        )
+
+
+# STORICO DEI CONSIGLI
 st.divider()
 st.subheader("📚 Storico dei consigli")
 
 try:
     consigli = (
         db.table("roulette_tips")
-        .select("id, market, suggestion, stake, created_at, result_number, evaluated_at")
+        .select(
+            "id, market, suggestion, stake, created_at, "
+            "result_number, evaluated_at"
+        )
         .eq("session_id", sid)
         .order("id", desc=True)
         .limit(100)
@@ -803,8 +840,10 @@ try:
 
     if consigli:
         dati = []
+
         for tip in consigli:
             numero_esito = tip["result_number"]
+
             if numero_esito is None:
                 esito = "In attesa"
             else:
@@ -824,7 +863,9 @@ try:
                 "Consiglio": tip["suggestion"],
                 "Esito": esito,
                 "Numero uscito": (
-                    numero_esito if numero_esito is not None else "—"
+                    numero_esito
+                    if numero_esito is not None
+                    else "—"
                 )
             })
 
@@ -833,8 +874,10 @@ try:
             use_container_width=True,
             hide_index=True
         )
+
     else:
         st.info("Non ci sono ancora consigli salvati.")
+
 except Exception as e:
     st.error(f"Errore caricamento storico consigli: {e}")
 
@@ -845,15 +888,10 @@ st.subheader("🕘 Ultimi risultati")
 
 if numbers:
     st.write(" → ".join(
-        f"{simbolo(n)} {n}" for n in numbers[-20:][::-1]
+        f"{simbolo(n)} {n}" for n in numbers[-10:][::-1]
     ))
-else:
-    st.info("Nessun risultato registrato.")
 
-
-# STORICO DETTAGLIATO
-with st.expander("📚 Storico dettagliato"):
-    if rows:
+    with st.expander("⌄ Mostra storico (ultimi 50)"):
         st.dataframe(
             [
                 {
@@ -861,8 +899,11 @@ with st.expander("📚 Storico dettagliato"):
                     "Colore": colore(r["number"]),
                     "Data e ora": r["created_at"]
                 }
-                for r in rows[-200:][::-1]
+                for r in rows[-50:][::-1]
             ],
             use_container_width=True,
             hide_index=True
         )
+
+else:
+    st.info("Nessun risultato registrato.")
