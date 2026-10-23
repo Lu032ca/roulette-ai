@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from collections import Counter
 import secrets
@@ -206,6 +207,166 @@ def esito_preso(mercato, scelta, numero):
         return scelta == f"{colonna}ª colonna"
 
     return False
+
+
+def risultato_mercato(numero, mercato):
+    if numero == 0:
+        return "Zero"
+
+    if mercato == "Rosso/Nero":
+        return colore(numero)
+
+    if mercato == "Dozzina":
+        return f"{(numero - 1) // 12 + 1}ª dozzina"
+
+    if mercato == "Colonna":
+        return f"{(numero - 1) % 3 + 1}ª colonna"
+
+    return None
+
+
+def categorie_mercato(mercato):
+    if mercato == "Rosso/Nero":
+        return ["Rosso", "Nero"]
+
+    if mercato == "Dozzina":
+        return ["1ª dozzina", "2ª dozzina", "3ª dozzina"]
+
+    if mercato == "Colonna":
+        return ["1ª colonna", "2ª colonna", "3ª colonna"]
+
+    return []
+
+
+# MOTORE DEI PATTERN
+def analizza_pattern(numeri, mercato, minimo_casi=3, soglia_vantaggio=0.05):
+    """
+    Cerca sequenze finali di 2-5 risultati e controlla gli esiti
+    successivi a sequenze uguali nello storico precedente.
+
+    Restituisce una scelta soltanto quando ci sono abbastanza esempi
+    e una differenza osservata rispetto alla frequenza di base.
+    """
+
+    categorie = categorie_mercato(mercato)
+
+    if len(numeri) < 10 or not categorie:
+        return None
+
+    sequenza = [
+        risultato_mercato(int(n), mercato)
+        for n in numeri
+    ]
+
+    lunghezza = len(sequenza)
+    candidati = []
+
+    for lung_pattern in range(2, min(5, lunghezza // 2) + 1):
+        inizio_pattern = lunghezza - lung_pattern
+        pattern = sequenza[inizio_pattern:]
+        storico_precedente = sequenza[:inizio_pattern]
+
+        if len(storico_precedente) < lung_pattern + 1:
+            continue
+
+        successivi = Counter()
+        occorrenze = 0
+
+        for i in range(
+            0,
+            len(storico_precedente) - lung_pattern
+        ):
+            if (
+                storico_precedente[i:i + lung_pattern] == pattern
+            ):
+                esito_successivo = storico_precedente[
+                    i + lung_pattern
+                ]
+                successivi[esito_successivo] += 1
+                occorrenze += 1
+
+        if occorrenze < minimo_casi:
+            continue
+
+        frequenze_base = Counter(storico_precedente)
+        totale_base = len(storico_precedente)
+
+        for categoria in categorie:
+            frequenza_pattern = successivi[categoria] / occorrenze
+            frequenza_base = (
+                frequenze_base[categoria] / totale_base
+                if totale_base else 0
+            )
+
+            candidati.append({
+                "scelta": categoria,
+                "lunghezza": lung_pattern,
+                "occorrenze": occorrenze,
+                "vantaggio": frequenza_pattern - frequenza_base
+            })
+
+    if not candidati:
+        return None
+
+    candidati.sort(
+        key=lambda c: (
+            c["vantaggio"],
+            c["occorrenze"],
+            c["lunghezza"]
+        ),
+        reverse=True
+    )
+
+    migliore = candidati[0]
+
+    if migliore["vantaggio"] < soglia_vantaggio:
+        return None
+
+    return migliore
+
+
+def scegli_consiglio(numeri, mercato):
+    """
+    Restituisce sempre una scelta quando esistono risultati.
+    Prima tenta l'analisi dei pattern; se non trova un candidato,
+    usa il gruppo meno frequente nella finestra recente.
+    """
+
+    if not numeri:
+        return None
+
+    analisi = analizza_pattern(
+        numeri,
+        mercato,
+        minimo_casi=3,
+        soglia_vantaggio=0.05
+    )
+
+    if analisi:
+        return analisi["scelta"]
+
+    categorie = categorie_mercato(mercato)
+
+    conteggi = {
+        categoria: sum(
+            risultato_mercato(n, mercato) == categoria
+            for n in numeri
+        )
+        for categoria in categorie
+    }
+
+    minimo = min(conteggi.values())
+    alternative = [
+        categoria
+        for categoria, conteggio in conteggi.items()
+        if conteggio == minimo
+    ]
+
+    # Risolve le parità senza favorire sempre la prima categoria.
+    if len(alternative) == 1:
+        return alternative[0]
+
+    return alternative[len(numeri) % len(alternative)]
 
 
 def registra_numero(numero, session_id):
@@ -514,8 +675,6 @@ st.subheader("🎲 Registra numero")
 st.caption("Tocca il numero uscito.")
 
 if puo_inserire:
-    # Sei colonne: 37 numeri distribuiti su 7 righe.
-    # I pulsanti compatti riducono lo spazio verticale.
     numeri = list(range(37))
     colonne_tastierino = st.columns(6, gap="small")
 
@@ -527,7 +686,6 @@ if puo_inserire:
                 use_container_width=True
             ):
                 registra_numero(n, sid)
-
 else:
     st.info("Accesso in sola visualizzazione.")
 
@@ -778,7 +936,7 @@ if nr:
             )
 
 
-# CONSIGLIO
+# CONSIGLIO AUTOMATICO
 st.divider()
 st.subheader("🎯 Consiglio")
 
@@ -788,88 +946,44 @@ mercato_consiglio = st.selectbox(
     key="mercato_consiglio"
 )
 
-importo = st.number_input(
-    "Importo (€)",
-    min_value=0.10,
-    max_value=100.0,
-    value=1.0,
-    step=0.10,
-    key="importo_consiglio"
-)
-
-if nr < 20:
-    st.caption("Servono almeno 20 giri nell'intervallo scelto.")
-
-else:
-    if mercato_consiglio == "Rosso/Nero":
-        gruppi_cons = {
-            "Rosso": sum(colore(n) == "Rosso" for n in recenti),
-            "Nero": sum(colore(n) == "Nero" for n in recenti)
-        }
-
-    elif mercato_consiglio == "Dozzina":
-        gruppi_cons = {
-            "1ª dozzina": sum(1 <= n <= 12 for n in recenti),
-            "2ª dozzina": sum(13 <= n <= 24 for n in recenti),
-            "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
-        }
-
-    else:
-        gruppi_cons = {
-            f"{i + 1}ª colonna": sum(
-                n != 0 and (n - 1) % 3 == i
-                for n in recenti
-            )
-            for i in range(3)
-        }
-
-    massimo = max(gruppi_cons.values())
-
-    scelte = [
-        nome for nome, conteggio in gruppi_cons.items()
-        if conteggio == massimo
-    ]
-
-    scelta = st.selectbox(
-        "Puntata suggerita",
-        scelte,
-        key="scelta_consiglio"
+if nr:
+    scelta = scegli_consiglio(
+        recenti,
+        mercato_consiglio
     )
 
-    st.markdown(f"### {scelta}")
-    st.caption(f"Importo: € {importo:.2f}")
+    if scelta:
+        st.markdown(f"### {scelta}")
 
-    if puo_inserire:
-        if st.button("💾 SALVA CONSIGLIO", key="salva_consiglio"):
-            try:
-                db.table("roulette_tips").insert({
-                    "user_id": user_id,
-                    "session_id": sid,
-                    "market": mercato_consiglio,
-                    "suggestion": scelta,
-                    "stake": importo
-                }).execute()
+        if puo_inserire:
+            if st.button("💾 SALVA CONSIGLIO", key="salva_consiglio"):
+                try:
+                    db.table("roulette_tips").insert({
+                        "user_id": user_id,
+                        "session_id": sid,
+                        "market": mercato_consiglio,
+                        "suggestion": scelta,
+                        "stake": 1.0
+                    }).execute()
 
-                st.success("Consiglio salvato.")
-                st.rerun()
+                    st.success("Consiglio salvato.")
+                    st.rerun()
 
-            except Exception as e:
-                st.error(f"Errore salvataggio consiglio: {e}")
-    else:
-        st.caption("Non hai i permessi per salvare consigli.")
+                except Exception as e:
+                    st.error(f"Errore salvataggio consiglio: {e}")
 
 
-# STORICO CONSIGLI MINIMAL
+# STORICO CONSIGLI COMPATTO
 st.divider()
 st.subheader("📚 Storico consigli")
 
 try:
     consigli = (
         db.table("roulette_tips")
-        .select("id, market, suggestion, stake, result_number")
+        .select("id, market, suggestion, result_number")
         .eq("session_id", sid)
         .order("id", desc=True)
-        .limit(100)
+        .limit(10)
         .execute()
         .data or []
     )
@@ -891,10 +1005,7 @@ try:
             c1, c2 = st.columns([3, 2])
 
             c1.markdown(f"**{tip['suggestion']}**")
-            c1.caption(
-                f"{tip['market']} · € {float(tip['stake']):.2f}"
-            )
-
+            c1.caption(tip["market"])
             c2.write(esito)
 
             if numero_esito is not None:
