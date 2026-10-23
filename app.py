@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from collections import Counter
 import secrets
@@ -166,7 +165,6 @@ def percentuale(n, totale):
 
 
 def esito_preso(mercato, scelta, numero):
-    """Confronta un consiglio con il numero uscito."""
     if mercato == "Rosso/Nero":
         return colore(numero) == scelta
 
@@ -190,7 +188,6 @@ def esito_preso(mercato, scelta, numero):
 
 
 def registra_numero(numero, session_id):
-    """Registra un giro e valuta i consigli in attesa."""
     try:
         db.table("spins").insert({
             "session_id": session_id,
@@ -243,7 +240,7 @@ with logout_col:
 st.divider()
 
 
-# CARICAMENTO SESSIONI ACCESSIBILI
+# CARICAMENTO SESSIONI
 try:
     sessions = (
         db.table("sessions")
@@ -261,11 +258,7 @@ try:
         .data or []
     )
 except Exception as e:
-    st.error(
-        "Non riesco a caricare le sessioni. "
-        "Se hai appena sostituito il codice, potrebbe mancare "
-        f"l'aggiornamento del database Supabase. Dettaglio: {e}"
-    )
+    st.error(f"Errore caricamento sessioni: {e}")
     st.stop()
 
 
@@ -278,13 +271,10 @@ def ruolo_sessione(s):
     return ruoli.get(int(s["id"]), "viewer")
 
 
-# CREA SESSIONE PERSONALE
+# CREA SESSIONE
 with st.expander("➕ Crea sessione", expanded=not sessions):
     with st.form("new_session"):
-        nome = st.text_input(
-            "Nome",
-            value=f"Sessione {datetime.now().strftime('%d/%m/%Y %H:%M')}"
-        )
+        nome = st.text_input("Nome", value="Nuova sessione")
         crea = st.form_submit_button("CREA")
 
     if crea:
@@ -318,21 +308,24 @@ if not sessions:
     st.info("Non hai ancora sessioni. Creane una per cominciare.")
     st.stop()
 
-opzioni = {
-    f"{s['name']} — {s['created_at']}": int(s["id"])
-    for s in sessions
-}
-sessione = st.selectbox("SESSIONE ATTIVA", list(opzioni.keys()))
-sid = opzioni[sessione]
-sessione_attiva = next(s for s in sessions if int(s["id"]) == sid)
+# Le opzioni usano gli ID internamente, ma mostrano solo il nome.
+sessioni_per_id = {int(s["id"]): s for s in sessions}
+
+sid = st.selectbox(
+    "SESSIONE ATTIVA",
+    list(sessioni_per_id.keys()),
+    format_func=lambda session_id: sessioni_per_id[session_id]["name"]
+)
+
+sessione_attiva = sessioni_per_id[sid]
 ruolo = ruolo_sessione(sessione_attiva)
 puo_inserire = ruolo in ("owner", "editor")
 proprietario = ruolo == "owner"
 
 st.caption({
-    "owner": "👑",
-    "editor": "🎲",
-    "viewer": "👁️"
+    "owner": "👑 Proprietario",
+    "editor": "🎲 Puoi inserire numeri",
+    "viewer": "👁️ Sola visualizzazione"
 }.get(ruolo, "Tavolo condiviso"))
 
 
@@ -354,7 +347,7 @@ with st.expander("👥 Condivisione e accessi"):
                     "join_session_by_code",
                     {"p_code": codice.strip()}
                 ).execute()
-                st.success("Richiesta completata. Aggiorno i tavoli...")
+                st.success("Accesso al tavolo completato.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Codice non valido o non utilizzabile: {e}")
@@ -393,17 +386,17 @@ with st.expander("👥 Condivisione e accessi"):
 
         if st.session_state.get("ultimo_invito"):
             st.success(
-                "Codice creato: "
-                + st.session_state["ultimo_invito"]
+                "Codice: " + st.session_state["ultimo_invito"]
             )
             st.caption(
                 "Permessi: "
                 + (
-                    "solo visualizzazione"
+                    "sola visualizzazione"
                     if st.session_state.get("ultimo_invito_ruolo") == "viewer"
                     else "inserimento numeri"
                 )
             )
+
             if st.button("Copia codice invito"):
                 st.code(st.session_state["ultimo_invito"])
 
@@ -435,11 +428,12 @@ with st.expander("👥 Condivisione e accessi"):
                                 ).eq("user_id", uid).execute()
                                 st.rerun()
             else:
-                st.info("Non ci sono ancora membri invitati.")
+                st.info("Non ci sono membri invitati.")
+
         except Exception as e:
             st.error(f"Errore caricamento membri: {e}")
 
-        st.markdown("#### Revoca codici d'invito")
+        st.markdown("#### Codici d'invito attivi")
 
         try:
             inviti = (
@@ -464,6 +458,7 @@ with st.expander("👥 Condivisione e accessi"):
                             "active": False
                         }).eq("id", invito["id"]).execute()
                         st.rerun()
+
         except Exception as e:
             st.error(f"Errore caricamento inviti: {e}")
 
@@ -514,7 +509,7 @@ st.divider()
 if rows:
     ultimo = rows[0]
     st.write(
-        f"Ultimo inserimento: **{ultimo['number']}** "
+        f"Ultimo numero: **{ultimo['number']}** "
         f"{simbolo(ultimo['number'])}"
     )
 
@@ -539,7 +534,7 @@ numbers = [int(r["number"]) for r in rows]
 totale = len(numbers)
 
 st.divider()
-st.subheader("📊 Statistiche della sessione")
+st.subheader("📊 Statistiche")
 
 a, b, c = st.columns(3)
 a.metric("Giri", totale)
@@ -550,7 +545,7 @@ red = sum(colore(n) == "Rosso" for n in numbers)
 black = sum(colore(n) == "Nero" for n in numbers)
 zero = sum(n == 0 for n in numbers)
 
-st.markdown("#### Percentuali osservate")
+st.markdown("#### Percentuali")
 a, b, c = st.columns(3)
 a.metric("🔴 Rosso", f"{percentuale(red, totale):.2f}%")
 b.metric("⚫ Nero", f"{percentuale(black, totale):.2f}%")
@@ -586,7 +581,7 @@ z.metric(
 # FREQUENZE NUMERI
 st.divider()
 st.subheader("🔢 Frequenza dei numeri")
-st.caption(f"Conteggi sull'intera sessione ({totale} giri).")
+st.caption(f"Conteggi sull'intera sessione: {totale} giri.")
 
 st.bar_chart({
     "Uscite": {str(n): numbers.count(n) for n in range(37)}
@@ -599,19 +594,21 @@ if totale:
 
     c1, c2 = st.columns(2)
 
-    c1.markdown("**Più usciti**")
-    c1.write(", ".join(
-        str(n) for n in range(37)
-        if frequenze.get(n, 0) == max_freq
-    ))
-    c1.caption(f"{max_freq} uscite")
+    with c1:
+        st.markdown("**Più usciti**")
+        st.write(", ".join(
+            str(n) for n in range(37)
+            if frequenze.get(n, 0) == max_freq
+        ))
+        st.caption(f"{max_freq} uscite")
 
-    c2.markdown("**Meno usciti**")
-    c2.write(", ".join(
-        str(n) for n in range(37)
-        if frequenze.get(n, 0) == min_freq
-    ))
-    c2.caption(f"{min_freq} uscite")
+    with c2:
+        st.markdown("**Meno usciti**")
+        st.write(", ".join(
+            str(n) for n in range(37)
+            if frequenze.get(n, 0) == min_freq
+        ))
+        st.caption(f"{min_freq} uscite")
 
 
 # DOZZINE E COLONNE
@@ -634,16 +631,12 @@ l, r = st.columns(2)
 with l:
     st.markdown("**Dozzine**")
     for i, val in enumerate(dozzine, 1):
-        st.write(
-            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
-        )
+        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
 
 with r:
     st.markdown("**Colonne**")
     for i, val in enumerate(colonne, 1):
-        st.write(
-            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
-        )
+        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
 
 
 # ANALISI DELLE PUNTATE
@@ -651,7 +644,7 @@ st.divider()
 st.subheader("🧠 Analisi delle puntate")
 
 mercato = st.selectbox(
-    "Mercato da analizzare",
+    "Mercato",
     ["Rosso / Nero", "Pari / Dispari", "Basso / Alto", "Dozzine", "Colonne"]
 )
 
@@ -689,11 +682,10 @@ else:
     }
 
 if nr:
-    st.write("**Risultati osservati nell'intervallo scelto:**")
-
     for label, value in gruppi.items():
         st.write(
-            f"{label}: {value}/{nr} ({percentuale(value, nr):.2f}%)"
+            f"{label}: {value}/{nr} "
+            f"({percentuale(value, nr):.2f}%)"
         )
 else:
     st.info("Registra qualche giro per analizzare i risultati.")
@@ -737,7 +729,7 @@ if nr:
 
 # CONSIGLIO PUNTATA
 st.divider()
-st.subheader("🎯 Consiglio della prossima puntata")
+st.subheader("🎯 Consiglio")
 
 mercato_consiglio = st.selectbox(
     "Tipo di puntata",
@@ -780,19 +772,19 @@ else:
         }
 
     massimo = max(gruppi_cons.values())
-
     scelte = [
         nome for nome, conteggio in gruppi_cons.items()
         if conteggio == massimo
     ]
 
     scelta = st.selectbox(
-        "Consiglio basato sulle frequenze",
+        "Puntata suggerita",
         scelte,
         key="scelta_consiglio"
     )
 
-    st.write(f"**Consiglio attuale: {scelta}**")
+    st.markdown(f"### {scelta}")
+    st.write(f"Importo: **€ {importo:.2f}**")
 
     if puo_inserire:
         if st.button("💾 SALVA CONSIGLIO", key="salva_consiglio"):
@@ -805,32 +797,23 @@ else:
                     "stake": importo
                 }).execute()
 
-                st.success(
-                    "Consiglio salvato. Verrà confrontato "
-                    "con il prossimo numero inserito."
-                )
+                st.success("Consiglio salvato.")
                 st.rerun()
 
             except Exception as e:
                 st.error(f"Errore salvataggio consiglio: {e}")
-
     else:
-        st.caption(
-            "Solo chi può inserire numeri può salvare un consiglio."
-        )
+        st.caption("Non hai i permessi per salvare consigli.")
 
 
-# STORICO DEI CONSIGLI
+# STORICO CONSIGLI MINIMAL
 st.divider()
-st.subheader("📚 Storico dei consigli")
+st.subheader("📚 Storico consigli")
 
 try:
     consigli = (
         db.table("roulette_tips")
-        .select(
-            "id, market, suggestion, stake, created_at, "
-            "result_number, evaluated_at"
-        )
+        .select("id, market, suggestion, stake, result_number")
         .eq("session_id", sid)
         .order("id", desc=True)
         .limit(100)
@@ -839,52 +822,43 @@ try:
     )
 
     if consigli:
-        dati = []
-
         for tip in consigli:
             numero_esito = tip["result_number"]
 
             if numero_esito is None:
-                esito = "In attesa"
+                esito = "⏳ In attesa"
             else:
-                esito = (
-                    "✅ Preso"
-                    if esito_preso(
-                        tip["market"],
-                        tip["suggestion"],
-                        int(numero_esito)
+                preso = esito_preso(
+                    tip["market"],
+                    tip["suggestion"],
+                    int(numero_esito)
+                )
+                esito = "✅ Preso" if preso else "❌ Non preso"
+
+            with st.container():
+                col1, col2 = st.columns([3, 2])
+
+                col1.markdown(f"**{tip['suggestion']}**")
+                col1.caption(
+                    f"{tip['market']} · € {float(tip['stake']):.2f}"
+                )
+
+                col2.write(esito)
+
+                if numero_esito is not None:
+                    col2.caption(
+                        f"Numero: {simbolo(int(numero_esito))} {numero_esito}"
                     )
-                    else "❌ Non preso"
-                )
 
-            dati.append({
-                "Data": tip["created_at"],
-                "Mercato": tip["market"],
-                "Consiglio": tip["suggestion"],
-                "Esito": esito,
-                "Numero uscito": (
-                    numero_esito
-                    if numero_esito is not None
-                    else "—"
-                )
-            })
-
-        st.dataframe(
-            dati,
-            use_container_width=True,
-            hide_index=True
-        )
-
+                st.divider()
     else:
-        st.info("Non ci sono ancora consigli salvati.")
+        st.caption("Nessun consiglio salvato.")
 
 except Exception as e:
     st.error(f"Errore caricamento storico consigli: {e}")
 
 
-
-# ULTIMI RISULTATI
-st.divider()
+# ULTIMI RISULTATI MINIMAL
 st.subheader("🕘 Ultimi risultati")
 
 if numbers:
@@ -897,7 +871,7 @@ if numbers:
             st.session_state.mostra_altri_risultati = False
 
         if st.button(
-            "⌄ Mostra altri risultati"
+            "⌄ Mostra altri"
             if not st.session_state.mostra_altri_risultati
             else "⌃ Mostra meno",
             key="toggle_risultati"
@@ -913,4 +887,4 @@ if numbers:
                 for n in numbers[-50:-10][::-1]
             ))
 else:
-    st.info("Nessun risultato registrato.")
+    st.caption("Nessun risultato.")
