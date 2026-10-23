@@ -5,6 +5,8 @@ import secrets
 import streamlit as st
 from supabase import create_client
 
+
+# CONFIGURAZIONE
 st.set_page_config(
     page_title="Roulette AI",
     page_icon="🎯",
@@ -13,14 +15,24 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.stApp {background:#101510;color:#f3ead5}
-h1,h2,h3 {color:#d8b66a !important}
-div.stButton > button {
-    border:1px solid #b99a52;
-    border-radius:10px;
-    min-height:42px;
+.stApp {
+    background: #101510;
+    color: #f3ead5;
 }
-[data-testid="stMetricValue"] {color:#d8b66a}
+h1, h2, h3 {
+    color: #d8b66a !important;
+}
+div[data-testid="stButton"] button {
+    border: 1px solid #8d7745;
+    border-radius: 8px;
+    min-height: 34px;
+    height: 34px;
+    padding: 0.1rem 0.2rem;
+    font-size: 13px;
+}
+[data-testid="stMetricValue"] {
+    color: #d8b66a;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,6 +70,7 @@ if st.session_state.access_token and st.session_state.refresh_token:
         current_user = db.auth.get_user(
             st.session_state.access_token
         ).user
+
     except Exception:
         st.session_state.access_token = None
         st.session_state.refresh_token = None
@@ -66,7 +79,7 @@ if st.session_state.access_token and st.session_state.refresh_token:
 
 if current_user is None:
     st.title("🎯 ROULETTE AI")
-    st.caption("Accedi al tuo account personale")
+    st.caption("Accedi al tuo account")
 
     tab_login, tab_register = st.tabs(["Accedi", "Crea account"])
 
@@ -75,7 +88,8 @@ if current_user is None:
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
             login_submit = st.form_submit_button(
-                "ENTRA", use_container_width=True
+                "ENTRA",
+                use_container_width=True
             )
 
         if login_submit:
@@ -84,19 +98,22 @@ if current_user is None:
                     "email": email.strip(),
                     "password": password
                 })
+
                 if not result.session:
                     st.error("Accesso non riuscito.")
                 else:
                     st.session_state.access_token = result.session.access_token
                     st.session_state.refresh_token = result.session.refresh_token
                     st.rerun()
+
             except Exception:
-                st.error("Accesso non riuscito. Controlla email e password.")
+                st.error("Controlla email e password.")
 
     with tab_register:
         with st.form("register"):
             new_email = st.text_input(
-                "La tua email", key="register_email"
+                "La tua email",
+                key="register_email"
             )
             new_password = st.text_input(
                 "Crea una password",
@@ -104,10 +121,12 @@ if current_user is None:
                 key="register_password"
             )
             confirm_password = st.text_input(
-                "Ripeti la password", type="password"
+                "Ripeti la password",
+                type="password"
             )
             register_submit = st.form_submit_button(
-                "CREA ACCOUNT", use_container_width=True
+                "CREA ACCOUNT",
+                use_container_width=True
             )
 
         if register_submit:
@@ -123,6 +142,7 @@ if current_user is None:
                         "email": new_email.strip(),
                         "password": new_password
                     })
+
                     if result.session:
                         st.session_state.access_token = result.session.access_token
                         st.session_state.refresh_token = result.session.refresh_token
@@ -132,8 +152,9 @@ if current_user is None:
                             "Account creato. Se richiesto, conferma "
                             "l'email e poi accedi."
                         )
+
                 except Exception:
-                    st.error("Registrazione non riuscita. Controlla l'email.")
+                    st.error("Registrazione non riuscita.")
 
     st.stop()
 
@@ -205,6 +226,7 @@ def registra_numero(numero, session_id):
 
         if pending:
             now = datetime.now().astimezone().isoformat()
+
             for tip in pending:
                 db.table("roulette_tips").update({
                     "result_number": int(numero),
@@ -233,6 +255,7 @@ with logout_col:
             db.auth.sign_out()
         except Exception:
             pass
+
         st.session_state.access_token = None
         st.session_state.refresh_token = None
         st.rerun()
@@ -240,11 +263,11 @@ with logout_col:
 st.divider()
 
 
-# CARICAMENTO SESSIONI
+# SESSIONI ACCESSIBILI
 try:
     sessions = (
         db.table("sessions")
-        .select("id, name, created_at, user_id")
+        .select("id, name, user_id")
         .order("id", desc=True)
         .execute()
         .data or []
@@ -257,12 +280,16 @@ try:
         .execute()
         .data or []
     )
+
 except Exception as e:
     st.error(f"Errore caricamento sessioni: {e}")
     st.stop()
 
 
-ruoli = {int(m["session_id"]): m["role"] for m in memberships}
+ruoli = {
+    int(m["session_id"]): m["role"]
+    for m in memberships
+}
 
 
 def ruolo_sessione(s):
@@ -272,9 +299,9 @@ def ruolo_sessione(s):
 
 
 # CREA SESSIONE
-with st.expander("➕ Crea sessione", expanded=not sessions):
+with st.expander("＋ Crea sessione", expanded=not sessions):
     with st.form("new_session"):
-        nome = st.text_input("Nome", value="Nuova sessione")
+        nome = st.text_input("Nome sessione", value="Nuova sessione")
         crea = st.form_submit_button("CREA")
 
     if crea:
@@ -295,7 +322,7 @@ with st.expander("➕ Crea sessione", expanded=not sessions):
 try:
     sessions = (
         db.table("sessions")
-        .select("id, name, created_at, user_id")
+        .select("id, name, user_id")
         .order("id", desc=True)
         .execute()
         .data or []
@@ -305,11 +332,13 @@ except Exception as e:
     st.stop()
 
 if not sessions:
-    st.info("Non hai ancora sessioni. Creane una per cominciare.")
+    st.info("Crea una sessione per cominciare.")
     st.stop()
 
-# Le opzioni usano gli ID internamente, ma mostrano solo il nome.
-sessioni_per_id = {int(s["id"]): s for s in sessions}
+
+sessioni_per_id = {
+    int(s["id"]): s for s in sessions
+}
 
 sid = st.selectbox(
     "SESSIONE ATTIVA",
@@ -329,12 +358,9 @@ st.caption({
 }.get(ruolo, "Tavolo condiviso"))
 
 
-# CONDIVISIONE TAVOLO
+# CONDIVISIONE
 with st.expander("👥 Condivisione e accessi"):
-    st.write(
-        "Condividi solo questa sessione. Le altre sessioni "
-        "rimangono private."
-    )
+    st.caption("La condivisione riguarda soltanto la sessione attiva.")
 
     with st.form("join_by_code"):
         codice = st.text_input("Codice d'invito")
@@ -352,14 +378,14 @@ with st.expander("👥 Condivisione e accessi"):
             except Exception as e:
                 st.error(f"Codice non valido o non utilizzabile: {e}")
         else:
-            st.warning("Inserisci un codice d'invito.")
+            st.warning("Inserisci un codice.")
 
     if proprietario:
-        st.markdown("#### Crea un invito")
+        st.markdown("#### Crea invito")
 
         with st.form("create_invite"):
             ruolo_invito = st.selectbox(
-                "Permessi dell'invitato",
+                "Permessi",
                 ["viewer", "editor"],
                 format_func=lambda x: (
                     "👁️ Viewer" if x == "viewer"
@@ -371,6 +397,7 @@ with st.expander("👥 Condivisione e accessi"):
         if genera:
             try:
                 codice_nuovo = secrets.token_urlsafe(9)
+
                 db.table("session_invites").insert({
                     "session_id": sid,
                     "code": codice_nuovo,
@@ -378,16 +405,16 @@ with st.expander("👥 Condivisione e accessi"):
                     "created_by": user_id,
                     "active": True
                 }).execute()
+
                 st.session_state["ultimo_invito"] = codice_nuovo
                 st.session_state["ultimo_invito_ruolo"] = ruolo_invito
                 st.rerun()
+
             except Exception as e:
                 st.error(f"Errore creazione invito: {e}")
 
         if st.session_state.get("ultimo_invito"):
-            st.success(
-                "Codice: " + st.session_state["ultimo_invito"]
-            )
+            st.code(st.session_state["ultimo_invito"])
             st.caption(
                 "Permessi: "
                 + (
@@ -397,10 +424,7 @@ with st.expander("👥 Condivisione e accessi"):
                 )
             )
 
-            if st.button("Copia codice invito"):
-                st.code(st.session_state["ultimo_invito"])
-
-        st.markdown("#### Membri del tavolo")
+        st.markdown("#### Membri")
 
         try:
             membri = (
@@ -414,11 +438,12 @@ with st.expander("👥 Condivisione e accessi"):
             if membri:
                 for membro in membri:
                     uid = str(membro["user_id"])
-                    riga1, riga2 = st.columns([3, 1])
-                    riga1.write(f"{uid} — {membro['role']}")
+                    c1, c2 = st.columns([3, 1])
+
+                    c1.write(f"{uid} — {membro['role']}")
 
                     if uid != user_id:
-                        with riga2:
+                        with c2:
                             if st.button(
                                 "Revoca",
                                 key=f"revoca_{sid}_{uid}"
@@ -428,17 +453,17 @@ with st.expander("👥 Condivisione e accessi"):
                                 ).eq("user_id", uid).execute()
                                 st.rerun()
             else:
-                st.info("Non ci sono membri invitati.")
+                st.caption("Nessun membro invitato.")
 
         except Exception as e:
             st.error(f"Errore caricamento membri: {e}")
 
-        st.markdown("#### Codici d'invito attivi")
+        st.markdown("#### Inviti attivi")
 
         try:
             inviti = (
                 db.table("session_invites")
-                .select("id, code, role, active")
+                .select("id, code, role")
                 .eq("session_id", sid)
                 .eq("active", True)
                 .execute()
@@ -463,11 +488,11 @@ with st.expander("👥 Condivisione e accessi"):
             st.error(f"Errore caricamento inviti: {e}")
 
 
-# STORICO SESSIONE
+# CARICAMENTO NUMERI
 def carica():
     return (
         db.table("spins")
-        .select("id, number, created_at")
+        .select("id, number")
         .eq("session_id", sid)
         .order("id", desc=True)
         .limit(1000)
@@ -483,24 +508,28 @@ except Exception as e:
     st.stop()
 
 
-# TASTIERINO 0-36
-st.subheader("🎲 Registra il numero uscito")
-st.caption("Tocca un numero per registrarlo.")
+# TASTIERINO COMPATTO
+st.divider()
+st.subheader("🎲 Registra numero")
+st.caption("Tocca il numero uscito.")
 
 if puo_inserire:
-    for start in range(0, 37, 3):
-        cols = st.columns(3)
+    # Sei colonne: 37 numeri distribuiti su 7 righe.
+    # I pulsanti compatti riducono lo spazio verticale.
+    numeri = list(range(37))
+    colonne_tastierino = st.columns(6, gap="small")
 
-        for j, n in enumerate(range(start, min(start + 3, 37))):
-            with cols[j]:
-                if st.button(
-                    f"{simbolo(n)}  {n}",
-                    key=f"num_{sid}_{n}",
-                    use_container_width=True
-                ):
-                    registra_numero(n, sid)
+    for i, n in enumerate(numeri):
+        with colonne_tastierino[i % 6]:
+            if st.button(
+                f"{simbolo(n)} {n}",
+                key=f"num_{sid}_{n}",
+                use_container_width=True
+            ):
+                registra_numero(n, sid)
+
 else:
-    st.info("Hai accesso in sola visualizzazione: non puoi inserire numeri.")
+    st.info("Accesso in sola visualizzazione.")
 
 
 # ANNULLA ULTIMO NUMERO
@@ -508,12 +537,13 @@ st.divider()
 
 if rows:
     ultimo = rows[0]
+
     st.write(
         f"Ultimo numero: **{ultimo['number']}** "
-        f"{simbolo(ultimo['number'])}"
+        f"{simbolo(int(ultimo['number']))}"
     )
 
-    if puo_inserire and st.button("↩️ ANNULLA ULTIMO NUMERO"):
+    if puo_inserire and st.button("↩️ ANNULLA ULTIMO"):
         try:
             db.table("spins").delete().eq(
                 "id", ultimo["id"]
@@ -546,6 +576,7 @@ black = sum(colore(n) == "Nero" for n in numbers)
 zero = sum(n == 0 for n in numbers)
 
 st.markdown("#### Percentuali")
+
 a, b, c = st.columns(3)
 a.metric("🔴 Rosso", f"{percentuale(red, totale):.2f}%")
 b.metric("⚫ Nero", f"{percentuale(black, totale):.2f}%")
@@ -554,23 +585,31 @@ c.metric("🟢 Zero", f"{percentuale(zero, totale):.2f}%")
 
 # ANALISI ULTIMI GIRI
 st.divider()
-st.subheader("⏱️ Analisi degli ultimi giri")
+st.subheader("⏱️ Ultimi giri")
 
-periodo = st.selectbox("Intervallo", [20, 50, 100], index=0)
+periodo = st.selectbox(
+    "Intervallo",
+    [20, 50, 100],
+    index=0
+)
+
 recenti = numbers[-periodo:]
 nr = len(recenti)
 
 x, y, z = st.columns(3)
+
 x.metric(
     "Rossi",
     f"{percentuale(sum(colore(n) == 'Rosso' for n in recenti), nr):.2f}%",
     f"{sum(colore(n) == 'Rosso' for n in recenti)} uscite"
 )
+
 y.metric(
     "Neri",
     f"{percentuale(sum(colore(n) == 'Nero' for n in recenti), nr):.2f}%",
     f"{sum(colore(n) == 'Nero' for n in recenti)} uscite"
 )
+
 z.metric(
     "Zero",
     f"{percentuale(sum(n == 0 for n in recenti), nr):.2f}%",
@@ -578,13 +617,16 @@ z.metric(
 )
 
 
-# FREQUENZE NUMERI
+# FREQUENZA NUMERI
 st.divider()
-st.subheader("🔢 Frequenza dei numeri")
-st.caption(f"Conteggi sull'intera sessione: {totale} giri.")
+st.subheader("🔢 Frequenza numeri")
+st.caption(f"Totale: {totale} giri.")
 
 st.bar_chart({
-    "Uscite": {str(n): numbers.count(n) for n in range(37)}
+    "Uscite": {
+        str(n): numbers.count(n)
+        for n in range(37)
+    }
 })
 
 if totale:
@@ -631,21 +673,31 @@ l, r = st.columns(2)
 with l:
     st.markdown("**Dozzine**")
     for i, val in enumerate(dozzine, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
 
 with r:
     st.markdown("**Colonne**")
     for i, val in enumerate(colonne, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
 
 
 # ANALISI DELLE PUNTATE
 st.divider()
-st.subheader("🧠 Analisi delle puntate")
+st.subheader("🧠 Analisi puntate")
 
 mercato = st.selectbox(
     "Mercato",
-    ["Rosso / Nero", "Pari / Dispari", "Basso / Alto", "Dozzine", "Colonne"]
+    [
+        "Rosso / Nero",
+        "Pari / Dispari",
+        "Basso / Alto",
+        "Dozzine",
+        "Colonne"
+    ]
 )
 
 if mercato == "Rosso / Nero":
@@ -676,7 +728,8 @@ elif mercato == "Dozzine":
 else:
     gruppi = {
         f"{i + 1}ª colonna": sum(
-            n != 0 and (n - 1) % 3 == i for n in recenti
+            n != 0 and (n - 1) % 3 == i
+            for n in recenti
         )
         for i in range(3)
     }
@@ -688,7 +741,7 @@ if nr:
             f"({percentuale(value, nr):.2f}%)"
         )
 else:
-    st.info("Registra qualche giro per analizzare i risultati.")
+    st.caption("Registra qualche giro per vedere le statistiche.")
 
 
 # NUMERI CALDI E FREDDI
@@ -711,23 +764,21 @@ if nr:
     col_caldi, col_freddi = st.columns(2)
 
     with col_caldi:
-        st.markdown("#### 🔥 Più usciti")
+        st.markdown("**🔥 Più usciti**")
         for n in caldi:
             st.write(
-                f"{simbolo(n)} **{n}** — "
-                f"{freq_recenti.get(n, 0)} uscite"
+                f"{simbolo(n)} {n} · {freq_recenti.get(n, 0)}"
             )
 
     with col_freddi:
-        st.markdown("#### ❄️ Meno usciti")
+        st.markdown("**❄️ Meno usciti**")
         for n in freddi:
             st.write(
-                f"{simbolo(n)} **{n}** — "
-                f"{freq_recenti.get(n, 0)} uscite"
+                f"{simbolo(n)} {n} · {freq_recenti.get(n, 0)}"
             )
 
 
-# CONSIGLIO PUNTATA
+# CONSIGLIO
 st.divider()
 st.subheader("🎯 Consiglio")
 
@@ -747,7 +798,7 @@ importo = st.number_input(
 )
 
 if nr < 20:
-    st.info("Registra almeno 20 giri nell'intervallo selezionato.")
+    st.caption("Servono almeno 20 giri nell'intervallo scelto.")
 
 else:
     if mercato_consiglio == "Rosso/Nero":
@@ -766,12 +817,14 @@ else:
     else:
         gruppi_cons = {
             f"{i + 1}ª colonna": sum(
-                n != 0 and (n - 1) % 3 == i for n in recenti
+                n != 0 and (n - 1) % 3 == i
+                for n in recenti
             )
             for i in range(3)
         }
 
     massimo = max(gruppi_cons.values())
+
     scelte = [
         nome for nome, conteggio in gruppi_cons.items()
         if conteggio == massimo
@@ -784,7 +837,7 @@ else:
     )
 
     st.markdown(f"### {scelta}")
-    st.write(f"Importo: **€ {importo:.2f}**")
+    st.caption(f"Importo: € {importo:.2f}")
 
     if puo_inserire:
         if st.button("💾 SALVA CONSIGLIO", key="salva_consiglio"):
@@ -835,35 +888,36 @@ try:
                 )
                 esito = "✅ Preso" if preso else "❌ Non preso"
 
-            with st.container():
-                col1, col2 = st.columns([3, 2])
+            c1, c2 = st.columns([3, 2])
 
-                col1.markdown(f"**{tip['suggestion']}**")
-                col1.caption(
-                    f"{tip['market']} · € {float(tip['stake']):.2f}"
+            c1.markdown(f"**{tip['suggestion']}**")
+            c1.caption(
+                f"{tip['market']} · € {float(tip['stake']):.2f}"
+            )
+
+            c2.write(esito)
+
+            if numero_esito is not None:
+                c2.caption(
+                    f"{simbolo(int(numero_esito))} {numero_esito}"
                 )
 
-                col2.write(esito)
+            st.divider()
 
-                if numero_esito is not None:
-                    col2.caption(
-                        f"Numero: {simbolo(int(numero_esito))} {numero_esito}"
-                    )
-
-                st.divider()
     else:
         st.caption("Nessun consiglio salvato.")
 
 except Exception as e:
-    st.error(f"Errore caricamento storico consigli: {e}")
+    st.error(f"Errore caricamento storico: {e}")
 
 
-# ULTIMI RISULTATI MINIMAL
+# ULTIMI RISULTATI
 st.subheader("🕘 Ultimi risultati")
 
 if numbers:
     st.write(" → ".join(
-        f"{simbolo(n)} {n}" for n in numbers[-10:][::-1]
+        f"{simbolo(n)} {n}"
+        for n in numbers[-10:][::-1]
     ))
 
     if len(numbers) > 10:
