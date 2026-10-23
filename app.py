@@ -620,6 +620,132 @@ else:
     st.info("Registra qualche giro per analizzare i risultati.")
 
 
+# NUMERI CALDI/FREDDI E SUGGERIMENTO
+st.divider()
+st.subheader("🔥 Numeri caldi e freddi")
+st.caption(
+    "Classifica descrittiva: le frequenze passate "
+    "non aumentano la probabilità di uscita futura."
+)
+
+if nr:
+    freq_recenti = Counter(recenti)
+
+    caldi = sorted(
+        range(37),
+        key=lambda n: (-freq_recenti.get(n, 0), n)
+    )[:5]
+
+    freddi = sorted(
+        range(37),
+        key=lambda n: (freq_recenti.get(n, 0), n)
+    )[:5]
+
+    col_caldi, col_freddi = st.columns(2)
+
+    with col_caldi:
+        st.markdown("#### 🔥 Più usciti")
+        for n in caldi:
+            st.write(
+                f"{simbolo(n)} **{n}** — "
+                f"{freq_recenti.get(n, 0)} uscite"
+            )
+
+    with col_freddi:
+        st.markdown("#### ❄️ Meno usciti")
+        for n in freddi:
+            st.write(
+                f"{simbolo(n)} **{n}** — "
+                f"{freq_recenti.get(n, 0)} uscite"
+            )
+
+    st.divider()
+    st.subheader("🎯 Suggerimento della puntata")
+
+    mercato_consiglio = st.selectbox(
+        "Tipo di puntata",
+        ["Rosso/Nero", "Dozzina", "Colonna"],
+        key="mercato_consiglio"
+    )
+
+    importo = st.number_input(
+        "Importo della puntata (€)",
+        min_value=0.0,
+        max_value=100.0,
+        value=1.0,
+        step=0.5,
+        key="importo_consiglio"
+    )
+
+    if nr < 20:
+        st.info(
+            f"Hai registrato {nr} giri nell'intervallo. "
+            "Per questa analisi è preferibile raccoglierne "
+            "almeno 20."
+        )
+    else:
+        if mercato_consiglio == "Rosso/Nero":
+            gruppi_cons = {
+                "Rosso": sum(colore(n) == "Rosso" for n in recenti),
+                "Nero": sum(colore(n) == "Nero" for n in recenti)
+            }
+            quota_lorda = 2
+
+        elif mercato_consiglio == "Dozzina":
+            gruppi_cons = {
+                "1ª dozzina": sum(1 <= n <= 12 for n in recenti),
+                "2ª dozzina": sum(13 <= n <= 24 for n in recenti),
+                "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
+            }
+            quota_lorda = 3
+
+        else:
+            gruppi_cons = {
+                f"{i + 1}ª colonna": sum(
+                    n != 0 and (n - 1) % 3 == i
+                    for n in recenti
+                )
+                for i in range(3)
+            }
+            quota_lorda = 3
+
+        massimo = max(gruppi_cons.values())
+        scelte = [
+            nome for nome, conteggio in gruppi_cons.items()
+            if conteggio == massimo
+        ]
+
+        st.markdown(
+            "**Esito più frequente nel campione:** "
+            + " / ".join(scelte)
+        )
+
+        st.write(
+            f"Uscite osservate: {massimo} su {nr} "
+            f"({percentuale(massimo, nr):.2f}%)."
+        )
+
+        st.write(
+            f"Probabilità teorica: "
+            f"{48.65 if mercato_consiglio == 'Rosso/Nero' else 32.43:.2f}% "
+            "circa."
+        )
+
+        st.write(
+            f"Se vinci: ritorno lordo indicativo "
+            f"€{importo * quota_lorda:.2f}; "
+            f"utile netto €{importo * (quota_lorda - 1):.2f}."
+        )
+
+        st.warning(
+            "Questa è una scelta basata sulla frequenza storica, "
+            "non una previsione affidabile. Anche l'esito meno "
+            "frequente può uscire al prossimo giro. "
+            "Non aumentare la puntata per recuperare perdite."
+        )
+else:
+    st.info("Registra qualche giro per iniziare l'analisi.")
+
 # ULTIMI RISULTATI
 st.divider()
 st.subheader("🕘 Ultimi risultati")
