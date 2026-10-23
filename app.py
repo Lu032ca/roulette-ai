@@ -1,7 +1,7 @@
-
 from datetime import datetime
 from collections import Counter
 import secrets
+import re
 
 import streamlit as st
 from supabase import create_client
@@ -40,16 +40,57 @@ div[data-testid="stButton"] button {
 
 # DATABASE
 try:
-    db = create_client(
-        st.secrets["SUPABASE_URL"],
-        st.secrets["SUPABASE_PUBLISHABLE_KEY"]
-    )
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_PUBLISHABLE_KEY = st.secrets["SUPABASE_PUBLISHABLE_KEY"]
+    SUPABASE_SECRET_KEY = st.secrets["supabase_key"]
+
+    # Client normale: usa la chiave pubblica e la sessione dell'utente.
+    db = create_client(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+
+    # Client amministrativo: resta sul server Streamlit e usa il Secret Key.
+    # Serve soltanto per associare username e account Supabase Auth.
+    admin_db = create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+
 except Exception as e:
-    st.error(f"Errore database: {type(e).__name__}: {e}")
+    st.error(
+        "Configurazione database incompleta. Controlla i Secrets di Streamlit "
+        "(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY e supabase_key). "
+        f"Dettaglio: {type(e).__name__}"
+    )
     st.stop()
 
 
-# AUTENTICAZIONE
+# AUTENTICAZIONE CON USERNAME E PASSWORD
+# Supabase Auth richiede un'email o un telefono. Per non chiedere l'email
+# all'utente viene usato un indirizzo tecnico interno, mai mostrato nel sito.
+EMAIL_SUFFIX = "@roulette-ai.invalid"
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,20}$")
+
+
+def username_valido(username):
+    return bool(USERNAME_PATTERN.fullmatch(username.strip()))
+
+
+def email_tecnica(username):
+    return username.strip().lower() + EMAIL_SUFFIX
+
+
+def trova_username(user_id):
+    try:
+        result = (
+            admin_db.table("usernames")
+            .select("username")
+            .eq("user_id", str(user_id))
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            return result.data[0]["username"]
+    except Exception:
+        pass
+    return "utente"
+
+
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
     st.session_state.refresh_token = None
@@ -86,7 +127,7 @@ if current_user is None:
 
     with tab_login:
         with st.form("login"):
-            email = st.text_input("Email")
+            username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             login_submit = st.form_submit_button(
                 "ENTRA",
@@ -94,27 +135,50 @@ if current_user is None:
             )
 
         if login_submit:
-            try:
-                result = db.auth.sign_in_with_password({
-                    "email": email.strip(),
-                    "password": password
-                })
+            clean_username = username.strip().lower()
 
-                if not result.session:
-                    st.error("Accesso non riuscito.")
-                else:
-                    st.session_state.access_token = result.session.access_token
-                    st.session_state.refresh_token = result.session.refresh_token
-                    st.rerun()
+            if not username_valido(clean_username):
+                st.error(
+                    "Lo username deve avere 3–20 caratteri: "
+                    "solo lettere, numeri e underscore."
+                )
+            elif not password:
+                st.error("Inserisci la password.")
+            else:
+                try:
+                    # Verifica che lo username sia registrato.
+                    lookup = (
+                        admin_db.table("usernames")
+                        .select("user_id")
+                        .eq("username", clean_username)
+                        .limit(1)
+                        .execute()
+                    )
 
-            except Exception:
-                st.error("Controlla email e password.")
+                    if not lookup.data:
+                        st.error("Username o password non corretti.")
+                    else:
+                        result = db.auth.sign_in_with_password({
+                            "email": email_tecnica(clean_username),
+                            "password": password
+                        })
+
+                        if not result.session:
+                            st.error("Username o password non corretti.")
+                        else:
+                            st.session_state.access_token = result.session.access_token
+                            st.session_state.refresh_token = result.session.refresh_token
+                            st.rerun()
+
+                except Exception:
+                    st.error("Username o password non corretti.")
 
     with tab_register:
         with st.form("register"):
-            new_email = st.text_input(
-                "La tua email",
-                key="register_email"
+            new_username = st.text_input(
+                "Scegli uno username",
+                max_chars=20,
+                key="register_username"
             )
             new_password = st.text_input(
                 "Crea una password",
@@ -131,36 +195,90 @@ if current_user is None:
             )
 
         if register_submit:
-            if not new_email.strip():
-                st.error("Inserisci un'email.")
+            clean_username = new_username.strip().lower()
+
+            if not username_valido(clean_username):
+                st.error(
+                    "Lo username deve avere 3–20 caratteri: "
+                    "solo lettere, numeri e underscore."
+                )
             elif len(new_password) < 8:
                 st.error("La password deve contenere almeno 8 caratteri.")
             elif new_password != confirm_password:
                 st.error("Le password non coincidono.")
             else:
+                created_user_id = None
                 try:
-                    result = db.auth.sign_up({
-                        "email": new_email.strip(),
-                        "password": new_password
-                    })
+                    # Controllo preventivo dello username.
+                    existing = (
+                        admin_db.table("usernames")
+                        .select("user_id")
+                        .eq("username", clean_username)
+                        .limit(1)
+                        .execute()
+                    )
 
-                    if result.session:
-                        st.session_state.access_token = result.session.access_token
-                        st.session_state.refresh_token = result.session.refresh_token
-                        st.rerun()
+                    if existing.data:
+                        st.error("Questo username è già utilizzato.")
                     else:
-                        st.success(
-                            "Account creato. Se richiesto, conferma "
-                            "l'email e poi accedi."
-                        )
+                        # Crea l'account senza inviare email di conferma.
+                        result = admin_db.auth.admin.create_user({
+                            "email": email_tecnica(clean_username),
+                            "password": new_password,
+                            "email_confirm": True
+                        })
+
+                        new_user = getattr(result, "user", None)
+                        if new_user is None:
+                            new_user = result
+
+                        created_user_id = str(new_user.id)
+
+                        # Salva l'associazione tra username e utente Auth.
+                        admin_db.table("usernames").insert({
+                            "user_id": created_user_id,
+                            "username": clean_username
+                        }).execute()
+
+                        # Accesso automatico dopo la registrazione.
+                        login_result = db.auth.sign_in_with_password({
+                            "email": email_tecnica(clean_username),
+                            "password": new_password
+                        })
+
+                        if login_result.session:
+                            st.session_state.access_token = login_result.session.access_token
+                            st.session_state.refresh_token = login_result.session.refresh_token
+                            st.success("Account creato!")
+                            st.rerun()
+                        else:
+                            st.success(
+                                "Account creato. Ora puoi accedere con username e password."
+                            )
 
                 except Exception:
-                    st.error("Registrazione non riuscita.")
+                    # Se l'account Auth è stato creato ma la mappatura non è
+                    # riuscita, prova a rimuovere l'account incompleto.
+                    if created_user_id:
+                        try:
+                            admin_db.auth.admin.delete_user(created_user_id)
+                        except Exception:
+                            pass
+                    st.error(
+                        "Registrazione non riuscita. Lo username potrebbe "
+                        "essere già utilizzato; controlla anche i Secrets "
+                        "di Supabase."
+                    )
 
+    st.caption(
+        "Username: 3–20 caratteri, lettere, numeri o underscore. "
+        "Password: almeno 8 caratteri."
+    )
     st.stop()
 
 
 user_id = str(current_user.id)
+current_username = trova_username(user_id)
 
 
 # ROULETTE EUROPEA
@@ -276,12 +394,8 @@ def analizza_pattern(numeri, mercato, minimo_casi=3, soglia_vantaggio=0.05):
             0,
             len(storico_precedente) - lung_pattern
         ):
-            if (
-                storico_precedente[i:i + lung_pattern] == pattern
-            ):
-                esito_successivo = storico_precedente[
-                    i + lung_pattern
-                ]
+            if storico_precedente[i:i + lung_pattern] == pattern:
+                esito_successivo = storico_precedente[i + lung_pattern]
                 successivi[esito_successivo] += 1
                 occorrenze += 1
 
@@ -362,7 +476,6 @@ def scegli_consiglio(numeri, mercato):
         if conteggio == minimo
     ]
 
-    # Risolve le parità senza favorire sempre la prima categoria.
     if len(alternative) == 1:
         return alternative[0]
 
@@ -408,7 +521,7 @@ titolo_col, logout_col = st.columns([4, 1])
 with titolo_col:
     st.title("🎯 ROULETTE AI")
     st.caption("ROULETTE EUROPEA · STATISTICHE E ANALISI")
-    st.caption(f"Account: {current_user.email}")
+    st.caption(f"Account: {current_username}")
 
 with logout_col:
     if st.button("ESCI", use_container_width=True):
