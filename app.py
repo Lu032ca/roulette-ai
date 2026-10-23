@@ -882,6 +882,7 @@ except Exception as e:
     st.error(f"Errore caricamento storico consigli: {e}")
 
 
+
 # ULTIMI RISULTATI
 st.divider()
 st.subheader("🕘 Ultimi risultati")
@@ -891,19 +892,25 @@ if numbers:
         f"{simbolo(n)} {n}" for n in numbers[-10:][::-1]
     ))
 
-    with st.expander("⌄ Mostra storico (ultimi 50)"):
-        st.dataframe(
-            [
-                {
-                    "Numero": r["number"],
-                    "Colore": colore(r["number"]),
-                    "Data e ora": r["created_at"]
-                }
-                for r in rows[-50:][::-1]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
+    if len(numbers) > 10:
+        if "mostra_altri_risultati" not in st.session_state:
+            st.session_state.mostra_altri_risultati = False
 
+        if st.button(
+            "⌄ Mostra altri risultati"
+            if not st.session_state.mostra_altri_risultati
+            else "⌃ Mostra meno",
+            key="toggle_risultati"
+        ):
+            st.session_state.mostra_altri_risultati = (
+                not st.session_state.mostra_altri_risultati
+            )
+            st.rerun()
+
+        if st.session_state.mostra_altri_risultati:
+            st.write(" → ".join(
+                f"{simbolo(n)} {n}"
+                for n in numbers[-50:-10][::-1]
+            ))
 else:
     st.info("Nessun risultato registrato.")
