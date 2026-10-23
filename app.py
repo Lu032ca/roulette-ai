@@ -620,12 +620,13 @@ else:
     st.info("Registra qualche giro per analizzare i risultati.")
 
 
-# NUMERI CALDI/FREDDI E SUGGERIMENTO
+
+# NUMERI CALDI/FREDDI E SUGGERIMENTI SALVATI
 st.divider()
 st.subheader("🔥 Numeri caldi e freddi")
 st.caption(
-    "Classifica descrittiva: le frequenze passate "
-    "non aumentano la probabilità di uscita futura."
+    "Le frequenze descrivono il passato, "
+    "non prevedono il prossimo giro."
 )
 
 if nr:
@@ -660,7 +661,7 @@ if nr:
             )
 
     st.divider()
-    st.subheader("🎯 Suggerimento della puntata")
+    st.subheader("🎯 Consiglio della prossima puntata")
 
     mercato_consiglio = st.selectbox(
         "Tipo di puntata",
@@ -669,7 +670,7 @@ if nr:
     )
 
     importo = st.number_input(
-        "Importo della puntata (€)",
+        "Importo (€)",
         min_value=0.0,
         max_value=100.0,
         value=1.0,
@@ -678,11 +679,7 @@ if nr:
     )
 
     if nr < 20:
-        st.info(
-            f"Hai registrato {nr} giri nell'intervallo. "
-            "Per questa analisi è preferibile raccoglierne "
-            "almeno 20."
-        )
+        st.info("Registra almeno 20 giri per attivare il consiglio.")
     else:
         if mercato_consiglio == "Rosso/Nero":
             gruppi_cons = {
@@ -690,6 +687,7 @@ if nr:
                 "Nero": sum(colore(n) == "Nero" for n in recenti)
             }
             quota_lorda = 2
+            prob_teorica = 18 / 37
 
         elif mercato_consiglio == "Dozzina":
             gruppi_cons = {
@@ -698,6 +696,7 @@ if nr:
                 "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
             }
             quota_lorda = 3
+            prob_teorica = 12 / 37
 
         else:
             gruppi_cons = {
@@ -708,6 +707,7 @@ if nr:
                 for i in range(3)
             }
             quota_lorda = 3
+            prob_teorica = 12 / 37
 
         massimo = max(gruppi_cons.values())
         scelte = [
@@ -715,34 +715,129 @@ if nr:
             if conteggio == massimo
         ]
 
-        st.markdown(
-            "**Esito più frequente nel campione:** "
-            + " / ".join(scelte)
+        scelta = st.selectbox(
+            "Esito da salvare",
+            scelte,
+            key="scelta_consiglio"
         )
 
         st.write(
-            f"Uscite osservate: {massimo} su {nr} "
+            f"Frequenza osservata: {massimo}/{nr} "
             f"({percentuale(massimo, nr):.2f}%)."
         )
-
         st.write(
-            f"Probabilità teorica: "
-            f"{48.65 if mercato_consiglio == 'Rosso/Nero' else 32.43:.2f}% "
-            "circa."
+            f"Probabilità teorica dell'esito: "
+            f"{prob_teorica * 100:.2f}%."
         )
-
         st.write(
-            f"Se vinci: ritorno lordo indicativo "
-            f"€{importo * quota_lorda:.2f}; "
+            f"Se vinci: ritorno lordo €{importo * quota_lorda:.2f}; "
             f"utile netto €{importo * (quota_lorda - 1):.2f}."
         )
 
-        st.warning(
-            "Questa è una scelta basata sulla frequenza storica, "
-            "non una previsione affidabile. Anche l'esito meno "
-            "frequente può uscire al prossimo giro. "
-            "Non aumentare la puntata per recuperare perdite."
+        if st.button("💾 SALVA CONSIGLIO", key="salva_consiglio"):
+            try:
+                db.table("roulette_tips").insert({
+                    "user_id": user_id,
+                    "session_id": sid,
+                    "market": mercato_consiglio,
+                    "suggestion": scelta,
+                    "stake": importo
+                }).execute()
+                st.success("Consiglio salvato!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Errore salvataggio consiglio: {e}")
+
+    st.divider()
+    st.subheader("📚 Storico dei consigli")
+
+    try:
+        consigli = (
+            db.table("roulette_tips")
+            .select("*")
+            .eq("session_id", sid)
+            .order("id", desc=True)
+            .limit(100)
+            .execute()
+            .data or []
         )
+
+        if consigli:
+            st.dataframe(
+                [
+                    {
+                        "Data": c["created_at"],
+                        "Mercato": c["market"],
+                        "Consiglio": c["suggestion"],
+                        "Puntata €": c["stake"],
+                        "Numero successivo": (
+                            c["result_number"]
+                            if c["result_number"] is not None
+                            else "In attesa"
+                        )
+                    }
+                    for c in consigli
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+            da_verificare = [
+                c for c in consigli
+                if c["result_number"] is None
+            ]
+
+            if da_verificare:
+                st.caption(
+                    "Per verificare un consiglio, seleziona "
+                    "il numero uscito nel giro successivo."
+                )
+
+                tip_scelto = st.selectbox(
+                    "Consiglio da verificare",
+                    da_verificare,
+                    format_func=lambda c: (
+                        f"#{c['id']} — {c['suggestion']} "
+                        f"({c['created_at']})"
+                    ),
+                    key="tip_da_verificare"
+                )
+
+                numero_esito = st.number_input(
+                    "Numero uscito dopo il consiglio",
+                    min_value=0,
+                    max_value=36,
+                    value=0,
+                    step=1,
+                    key="numero_esito_consiglio"
+                )
+
+                if st.button(
+                    "REGISTRA ESITO DEL CONSIGLIO",
+                    key="registra_esito_consiglio"
+                ):
+                    try:
+                        db.table("roulette_tips").update({
+                            "result_number": int(numero_esito),
+                            "evaluated_at": datetime.now().astimezone().isoformat()
+                        }).eq(
+                            "id", tip_scelto["id"]
+                        ).eq(
+                            "session_id", sid
+                        ).eq(
+                            "user_id", user_id
+                        ).execute()
+
+                        st.success("Esito registrato.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore registrazione esito: {e}")
+        else:
+            st.info("Non hai ancora salvato consigli per questa sessione.")
+
+    except Exception as e:
+        st.error(f"Errore caricamento consigli: {e}")
+
 else:
     st.info("Registra qualche giro per iniziare l'analisi.")
 
