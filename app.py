@@ -549,11 +549,6 @@ a.metric("🔴 Rosso", f"{percentuale(red, totale):.2f}%")
 b.metric("⚫ Nero", f"{percentuale(black, totale):.2f}%")
 c.metric("🟢 Zero", f"{percentuale(zero, totale):.2f}%")
 
-with st.expander("Probabilità teoriche"):
-    st.write("Rosso: **48,65%**")
-    st.write("Nero: **48,65%**")
-    st.write("Zero: **2,70%**")
-
 
 # ANALISI ULTIMI GIRI
 st.divider()
@@ -691,10 +686,7 @@ if nr:
         "Meno frequente nei dati: "
         + ", ".join(k for k, v in gruppi.items() if v == minimo)
     )
-    st.caption(
-        "I risultati descrivono il campione osservato e non "
-        "permettono di prevedere con affidabilità il giro successivo."
-    )
+
 else:
     st.info("Registra qualche giro per analizzare i risultati.")
 
@@ -874,8 +866,3 @@ with st.expander("📚 Storico dettagliato"):
             use_container_width=True,
             hide_index=True
         )
-
-st.caption(
-    "Roulette europea: ogni giro è indipendente. "
-    "Le statistiche descrivono il passato e non garantiscono vincite."
-)
