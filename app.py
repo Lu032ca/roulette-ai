@@ -65,6 +65,8 @@ if not st.session_state.access_token:
             except Exception:
                 st.error("Email o password non corretti.")
     st.stop()
+    current_user = db.auth.get_user().user
+user_id = current_user.id
 
 ROSSI = {
     1, 3, 5, 7, 9, 12, 14, 16, 18,
