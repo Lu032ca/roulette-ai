@@ -5,7 +5,11 @@ from collections import Counter
 import streamlit as st
 from supabase import create_client
 
-st.set_page_config(page_title="Roulette AI", page_icon="🎯", layout="wide")
+st.set_page_config(
+    page_title="Roulette AI",
+    page_icon="🎯",
+    layout="wide"
+)
 
 st.markdown("""
 <style>
@@ -20,117 +24,284 @@ div.stButton > button {
 </style>
 """, unsafe_allow_html=True)
 
-# DATABASE E ACCESSO PERSONALE
+
+# DATABASE
 try:
     db = create_client(
         st.secrets["SUPABASE_URL"],
         st.secrets["SUPABASE_PUBLISHABLE_KEY"]
     )
 except Exception as e:
-    st.error(f"Errore di collegamento: {type(e).__name__}: {e}")
+    st.error(f"Errore database: {type(e).__name__}: {e}")
     st.stop()
 
+
+# ACCESSO PERSONALE
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
     st.session_state.refresh_token = None
 
-if st.session_state.access_token and st.session_state.refresh_token:
+current_user = None
+
+if (
+    st.session_state.access_token
+    and st.session_state.refresh_token
+):
     try:
         db.auth.set_session(
             st.session_state.access_token,
             st.session_state.refresh_token
         )
-        session = db.auth.get_session()
-        if session:
-            st.session_state.access_token = session.access_token
-            st.session_state.refresh_token = session.refresh_token
+
+        auth_session = db.auth.get_session()
+
+        if auth_session:
+            st.session_state.access_token = (
+                auth_session.access_token
+            )
+            st.session_state.refresh_token = (
+                auth_session.refresh_token
+            )
+
+        current_user = db.auth.get_user(
+            st.session_state.access_token
+        ).user
+
     except Exception:
         st.session_state.access_token = None
         st.session_state.refresh_token = None
+        current_user = None
 
-if not st.session_state.access_token:
+
+if current_user is None:
     st.title("🎯 ROULETTE AI")
-    with st.form("login"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.form_submit_button("ENTRA"):
+    st.caption("Accedi al tuo account personale")
+
+    tab_login, tab_register = st.tabs(
+        ["Accedi", "Crea account"]
+    )
+
+    with tab_login:
+        with st.form("login"):
+            email = st.text_input("Email")
+            password = st.text_input(
+                "Password",
+                type="password"
+            )
+            login_submit = st.form_submit_button(
+                "ENTRA",
+                use_container_width=True
+            )
+
+        if login_submit:
             try:
                 result = db.auth.sign_in_with_password({
                     "email": email.strip(),
                     "password": password
                 })
-                st.session_state.access_token = result.session.access_token
-                st.session_state.refresh_token = result.session.refresh_token
-                st.rerun()
+
+                if not result.session:
+                    st.error("Accesso non riuscito.")
+                else:
+                    st.session_state.access_token = (
+                        result.session.access_token
+                    )
+                    st.session_state.refresh_token = (
+                        result.session.refresh_token
+                    )
+                    st.rerun()
+
             except Exception:
-                st.error("Email o password non corretti.")
+                st.error(
+                    "Accesso non riuscito. "
+                    "Controlla email e password."
+                )
+
+    with tab_register:
+        with st.form("register"):
+            new_email = st.text_input(
+                "La tua email",
+                key="register_email"
+            )
+            new_password = st.text_input(
+                "Crea una password",
+                type="password",
+                key="register_password"
+            )
+            confirm_password = st.text_input(
+                "Ripeti la password",
+                type="password"
+            )
+
+            register_submit = st.form_submit_button(
+                "CREA ACCOUNT",
+                use_container_width=True
+            )
+
+        if register_submit:
+            if not new_email.strip():
+                st.error("Inserisci un'email.")
+            elif len(new_password) < 8:
+                st.error(
+                    "La password deve contenere "
+                    "almeno 8 caratteri."
+                )
+            elif new_password != confirm_password:
+                st.error("Le password non coincidono.")
+            else:
+                try:
+                    result = db.auth.sign_up({
+                        "email": new_email.strip(),
+                        "password": new_password
+                    })
+
+                    if result.session:
+                        st.session_state.access_token = (
+                            result.session.access_token
+                        )
+                        st.session_state.refresh_token = (
+                            result.session.refresh_token
+                        )
+                        st.rerun()
+                    else:
+                        st.success(
+                            "Account creato. Se richiesto, "
+                            "conferma l'email e poi accedi."
+                        )
+
+                except Exception:
+                    st.error(
+                        "Registrazione non riuscita. "
+                        "Controlla l'email o prova ad accedere."
+                    )
+
     st.stop()
-    current_user = db.auth.get_user().user
+
+
 user_id = current_user.id
 
+
+# FUNZIONI ROULETTE
 ROSSI = {
     1, 3, 5, 7, 9, 12, 14, 16, 18,
     19, 21, 23, 25, 27, 30, 32, 34, 36
 }
+
 
 def colore(n):
     if n == 0:
         return "Verde"
     return "Rosso" if n in ROSSI else "Nero"
 
+
 def simbolo(n):
-    return "🟢" if n == 0 else ("🔴" if n in ROSSI else "⚫")
+    if n == 0:
+        return "🟢"
+    return "🔴" if n in ROSSI else "⚫"
+
 
 def percentuale(n, totale):
     return 100 * n / totale if totale else 0
 
-st.title("🎯 ROULETTE AI")
-st.caption("ROULETTE EUROPEA · STATISTICHE E ANALISI")
+
+# INTESTAZIONE
+titolo_col, logout_col = st.columns([4, 1])
+
+with titolo_col:
+    st.title("🎯 ROULETTE AI")
+    st.caption("ROULETTE EUROPEA · STATISTICHE E ANALISI")
+    st.caption(f"Account: {current_user.email}")
+
+with logout_col:
+    if st.button("ESCI", use_container_width=True):
+        try:
+            db.auth.sign_out()
+        except Exception:
+            pass
+
+        st.session_state.access_token = None
+        st.session_state.refresh_token = None
+        st.rerun()
+
 st.divider()
 
-# SESSIONI
+
+# SESSIONI PERSONALI
 try:
     sessions = (
         db.table("sessions")
         .select("id, name, created_at")
         .order("id", desc=True)
-        .execute().data or []
+        .execute()
+        .data or []
     )
 except Exception as e:
     st.error(f"Errore sessioni: {e}")
     st.stop()
 
-with st.expander("➕ Crea sessione", expanded=not sessions):
+
+with st.expander(
+    "➕ Crea sessione",
+    expanded=not sessions
+):
     with st.form("new_session"):
         nome = st.text_input(
             "Nome",
-            value=f"Sessione {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            value=(
+                f"Sessione "
+                f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            )
         )
+
         if st.form_submit_button("CREA"):
             if nome.strip():
-                db.table("sessions").insert(
-                    {"name": nome.strip()}
-                ).execute()
-                st.rerun()
+                try:
+                    db.table("sessions").insert({
+                        "name": nome.strip(),
+                        "user_id": user_id
+                    }).execute()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore creazione sessione: {e}")
             else:
                 st.warning("Inserisci un nome.")
 
-sessions = (
-    db.table("sessions")
-    .select("id, name, created_at")
-    .order("id", desc=True)
-    .execute().data or []
-)
 
-if not sessions:
-    st.info("Crea una sessione per cominciare.")
+try:
+    sessions = (
+        db.table("sessions")
+        .select("id, name, created_at")
+        .order("id", desc=True)
+        .execute()
+        .data or []
+    )
+except Exception as e:
+    st.error(f"Errore caricamento sessioni: {e}")
     st.stop()
 
-opzioni = {f"{s['name']} — {s['created_at']}": s["id"] for s in sessions}
-sessione = st.selectbox("SESSIONE ATTIVA", list(opzioni.keys()))
+
+if not sessions:
+    st.info(
+        "Non hai ancora sessioni. "
+        "Creane una per cominciare."
+    )
+    st.stop()
+
+
+opzioni = {
+    f"{s['name']} — {s['created_at']}": s["id"]
+    for s in sessions
+}
+
+sessione = st.selectbox(
+    "SESSIONE ATTIVA",
+    list(opzioni.keys())
+)
+
 sid = opzioni[sessione]
 
-# CARICAMENTO STORICO: ultimi 1000 giri della sessione
+
+# STORICO DELLA SESSIONE
 def carica():
     return (
         db.table("spins")
@@ -138,8 +309,10 @@ def carica():
         .eq("session_id", sid)
         .order("id", desc=True)
         .limit(1000)
-        .execute().data or []
+        .execute()
+        .data or []
     )
+
 
 try:
     rows = carica()
@@ -147,12 +320,14 @@ except Exception as e:
     st.error(f"Errore storico: {e}")
     st.stop()
 
-# TASTIERA
+
+# TASTIERINO 0-36
 st.subheader("🎲 Registra il numero uscito")
 st.caption("Tocca un numero per registrarlo direttamente.")
 
 for start in range(0, 37, 3):
     cols = st.columns(3)
+
     for j, n in enumerate(range(start, min(start + 3, 37))):
         with cols[j]:
             if st.button(
@@ -169,50 +344,82 @@ for start in range(0, 37, 3):
                 except Exception as e:
                     st.error(f"Errore salvataggio: {e}")
 
-# AGGIUNTA MANUALE OPZIONALE
+
+# INSERIMENTO MANUALE
 with st.expander("Inserimento manuale"):
     with st.form("manuale"):
         n_manual = st.number_input(
-            "Numero da 0 a 36", 0, 36, 0, 1
+            "Numero da 0 a 36",
+            min_value=0,
+            max_value=36,
+            value=0,
+            step=1
         )
-        if st.form_submit_button("REGISTRA"):
-            db.table("spins").insert({
-                "session_id": sid,
-                "number": int(n_manual)
-            }).execute()
-            st.rerun()
 
-# ANNULLA ULTIMO
+        if st.form_submit_button("REGISTRA"):
+            try:
+                db.table("spins").insert({
+                    "session_id": sid,
+                    "number": int(n_manual)
+                }).execute()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Errore salvataggio: {e}")
+
+
+# ANNULLA ULTIMO NUMERO
 st.divider()
+
 if rows:
     ultimo = rows[0]
+
     st.write(
         f"Ultimo inserimento: **{ultimo['number']}** "
         f"{simbolo(ultimo['number'])}"
     )
+
     if st.button("↩️ ANNULLA ULTIMO NUMERO"):
-        db.table("spins").delete().eq("id", ultimo["id"]).eq(
-            "session_id", sid
-        ).execute()
-        st.rerun()
+        try:
+            db.table("spins").delete().eq(
+                "id", ultimo["id"]
+            ).eq(
+                "session_id", sid
+            ).execute()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Errore annullamento: {e}")
+
 
 # STATISTICHE
-rows = list(reversed(carica()))
+try:
+    rows = list(reversed(carica()))
+except Exception as e:
+    st.error(f"Errore statistiche: {e}")
+    st.stop()
+
 numbers = [int(r["number"]) for r in rows]
 totale = len(numbers)
 
 st.divider()
 st.subheader("📊 Statistiche della sessione")
+
 a, b, c = st.columns(3)
 a.metric("Giri", totale)
-b.metric("Rossi", sum(colore(n) == "Rosso" for n in numbers))
-c.metric("Neri", sum(colore(n) == "Nero" for n in numbers))
+b.metric(
+    "Rossi",
+    sum(colore(n) == "Rosso" for n in numbers)
+)
+c.metric(
+    "Neri",
+    sum(colore(n) == "Nero" for n in numbers)
+)
 
 red = sum(colore(n) == "Rosso" for n in numbers)
 black = sum(colore(n) == "Nero" for n in numbers)
 zero = sum(n == 0 for n in numbers)
 
 st.markdown("#### Percentuali osservate")
+
 a, b, c = st.columns(3)
 a.metric("🔴 Rosso", f"{percentuale(red, totale):.2f}%")
 b.metric("⚫ Nero", f"{percentuale(black, totale):.2f}%")
@@ -223,43 +430,74 @@ with st.expander("Probabilità teoriche"):
     st.write("Nero: **48,65%**")
     st.write("Zero: **2,70%**")
 
-# INTERVALLI 20/50/100
+
+# ANALISI ULTIMI GIRI
 st.divider()
 st.subheader("⏱️ Analisi degli ultimi giri")
-periodo = st.selectbox("Intervallo", [20, 50, 100], index=0)
+
+periodo = st.selectbox(
+    "Intervallo",
+    [20, 50, 100],
+    index=0
+)
+
 recenti = numbers[-periodo:]
 nr = len(recenti)
-cr = Counter(recenti)
 
 x, y, z = st.columns(3)
-x.metric("Rossi", f"{percentuale(sum(colore(n)=='Rosso' for n in recenti), nr):.2f}%",
-         f"{sum(colore(n)=='Rosso' for n in recenti)} uscite")
-y.metric("Neri", f"{percentuale(sum(colore(n)=='Nero' for n in recenti), nr):.2f}%",
-         f"{sum(colore(n)=='Nero' for n in recenti)} uscite")
-z.metric("Zero", f"{percentuale(sum(n==0 for n in recenti), nr):.2f}%",
-         f"{sum(n==0 for n in recenti)} uscite")
 
-# FREQUENZE
+x.metric(
+    "Rossi",
+    f"{percentuale(sum(colore(n) == 'Rosso' for n in recenti), nr):.2f}%",
+    f"{sum(colore(n) == 'Rosso' for n in recenti)} uscite"
+)
+
+y.metric(
+    "Neri",
+    f"{percentuale(sum(colore(n) == 'Nero' for n in recenti), nr):.2f}%",
+    f"{sum(colore(n) == 'Nero' for n in recenti)} uscite"
+)
+
+z.metric(
+    "Zero",
+    f"{percentuale(sum(n == 0 for n in recenti), nr):.2f}%",
+    f"{sum(n == 0 for n in recenti)} uscite"
+)
+
+
+# FREQUENZE NUMERI
 st.divider()
 st.subheader("🔢 Frequenza dei numeri")
 st.caption(f"Conteggi sull'intera sessione ({totale} giri).")
+
 st.bar_chart({
-    "Uscite": {str(n): numbers.count(n) for n in range(37)}
+    "Uscite": {
+        str(n): numbers.count(n)
+        for n in range(37)
+    }
 })
 
 if totale:
     frequenze = Counter(numbers)
     max_freq = max(frequenze.values())
     min_freq = min(frequenze.get(n, 0) for n in range(37))
+
     c1, c2 = st.columns(2)
+
     c1.markdown("**Più usciti**")
-    c1.write(", ".join(str(n) for n in range(37)
-                       if frequenze.get(n, 0) == max_freq))
+    c1.write(", ".join(
+        str(n) for n in range(37)
+        if frequenze.get(n, 0) == max_freq
+    ))
     c1.caption(f"{max_freq} uscite")
+
     c2.markdown("**Meno usciti**")
-    c2.write(", ".join(str(n) for n in range(37)
-                       if frequenze.get(n, 0) == min_freq))
+    c2.write(", ".join(
+        str(n) for n in range(37)
+        if frequenze.get(n, 0) == min_freq
+    ))
     c2.caption(f"{min_freq} uscite")
+
 
 # DOZZINE E COLONNE
 st.divider()
@@ -270,24 +508,33 @@ dozzine = [
     sum(13 <= n <= 24 for n in numbers),
     sum(25 <= n <= 36 for n in numbers)
 ]
+
 colonne = [
-    sum(n != 0 and (n-1) % 3 == i for n in numbers)
+    sum(n != 0 and (n - 1) % 3 == i for n in numbers)
     for i in range(3)
 ]
 
 l, r = st.columns(2)
+
 with l:
     st.markdown("**Dozzine**")
     for i, val in enumerate(dozzine, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
+
 with r:
     st.markdown("**Colonne**")
     for i, val in enumerate(colonne, 1):
-        st.write(f"{i}ª: {val} ({percentuale(val, totale):.2f}%)")
+        st.write(
+            f"{i}ª: {val} ({percentuale(val, totale):.2f}%)"
+        )
 
-# SUGGERIMENTI DI PUNTATA
+
+# ANALISI DELLE PUNTATE
 st.divider()
 st.subheader("🧠 Analisi delle puntate")
+
 st.write(
     "Questa sezione confronta i risultati recenti, ma non può "
     "prevedere in modo affidabile il prossimo giro."
@@ -295,8 +542,13 @@ st.write(
 
 mercato = st.selectbox(
     "Mercato da analizzare",
-    ["Rosso / Nero", "Pari / Dispari", "Basso / Alto",
-     "Dozzine", "Colonne"]
+    [
+        "Rosso / Nero",
+        "Pari / Dispari",
+        "Basso / Alto",
+        "Dozzine",
+        "Colonne"
+    ]
 )
 
 if mercato == "Rosso / Nero":
@@ -305,18 +557,21 @@ if mercato == "Rosso / Nero":
         "Nero": sum(colore(n) == "Nero" for n in recenti)
     }
     probabilita = "48,65% per ciascun colore"
+
 elif mercato == "Pari / Dispari":
     gruppi = {
         "Pari": sum(n != 0 and n % 2 == 0 for n in recenti),
         "Dispari": sum(n % 2 == 1 for n in recenti)
     }
     probabilita = "48,65% per ciascun esito"
+
 elif mercato == "Basso / Alto":
     gruppi = {
         "Basso (1–18)": sum(1 <= n <= 18 for n in recenti),
         "Alto (19–36)": sum(19 <= n <= 36 for n in recenti)
     }
     probabilita = "48,65% per ciascun esito"
+
 elif mercato == "Dozzine":
     gruppi = {
         "1ª dozzina": sum(1 <= n <= 12 for n in recenti),
@@ -324,28 +579,37 @@ elif mercato == "Dozzine":
         "3ª dozzina": sum(25 <= n <= 36 for n in recenti)
     }
     probabilita = "32,43% per ciascuna dozzina"
+
 else:
     gruppi = {
-        f"{i+1}ª colonna": sum(
-            n != 0 and (n-1) % 3 == i for n in recenti
+        f"{i + 1}ª colonna": sum(
+            n != 0 and (n - 1) % 3 == i
+            for n in recenti
         )
         for i in range(3)
     }
     probabilita = "32,43% per ciascuna colonna"
 
 st.caption(f"Probabilità teorica: {probabilita}.")
+
 if nr:
     st.write("**Risultati osservati nell'intervallo scelto:**")
+
     for label, value in gruppi.items():
-        st.write(f"{label}: {value}/{nr} ({percentuale(value, nr):.2f}%)")
+        st.write(
+            f"{label}: {value}/{nr} "
+            f"({percentuale(value, nr):.2f}%)"
+        )
 
     maxval = max(gruppi.values())
     minval = min(gruppi.values())
+
     piu = [k for k, v in gruppi.items() if v == maxval]
     meno = [k for k, v in gruppi.items() if v == minval]
 
     st.info("Più frequente nei dati: " + ", ".join(piu))
     st.write("Meno frequente nei dati: " + ", ".join(meno))
+
     st.warning(
         "Questi sono dati storici, non consigli predittivi. "
         "Un esito meno uscito non è più probabile al prossimo giro. "
@@ -355,27 +619,35 @@ if nr:
 else:
     st.info("Registra qualche giro per analizzare i risultati.")
 
+
 # ULTIMI RISULTATI
 st.divider()
 st.subheader("🕘 Ultimi risultati")
+
 if numbers:
     st.write(" → ".join(
-        f"{simbolo(n)} {n}" for n in numbers[-20:][::-1]
+        f"{simbolo(n)} {n}"
+        for n in numbers[-20:][::-1]
     ))
 else:
     st.info("Nessun risultato registrato.")
 
-# STORICO
+
+# STORICO DETTAGLIATO
 with st.expander("📚 Storico dettagliato"):
     if rows:
-        st.dataframe([
-            {
-                "Numero": r["number"],
-                "Colore": colore(r["number"]),
-                "Data e ora": r["created_at"]
-            }
-            for r in reversed(rows[-200:])
-        ], use_container_width=True, hide_index=True)
+        st.dataframe(
+            [
+                {
+                    "Numero": r["number"],
+                    "Colore": colore(r["number"]),
+                    "Data e ora": r["created_at"]
+                }
+                for r in rows[-200:][::-1]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
 
 st.caption(
     "Roulette europea: ogni giro è indipendente. "
