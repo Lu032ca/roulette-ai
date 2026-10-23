@@ -330,7 +330,7 @@ st.caption({
     "owner": "👑",
     "editor": "🎲",
     "viewer": "👁️"
-}.get(ruolo, "tavolo condiviso"))
+}.get(ruolo, "Tavolo condiviso"))
 
 
 # CONDIVISIONE TAVOLO
