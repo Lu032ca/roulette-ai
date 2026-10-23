@@ -220,8 +220,5 @@ try:
         "i risultati casuali della roulette."
     )
 
-except Exception:
-    st.error(
-        "Si è verificato un errore nel database. "
-        "Controlla le tabelle Supabase e i Secrets di Streamlit."
-    )
+except Exception as e:
+    st.error(f"Errore database: {type(e).__name__}: {e}")
